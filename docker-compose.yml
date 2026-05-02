@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # Backend Spring Boot Service
+  # ==========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: job-tracker-backend
+    ports:
+      - "8080:8080"
+    environment:
+      # Activate production profile
+      - SPRING_PROFILES_ACTIVE=prod
+      # Database connection (matches mysql service)
+      - DB_URL=jdbc:mysql://mysql:3306/job_tracker_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      - DB_USERNAME=job_tracker_user
+      - DB_PASSWORD=secure_db_password_123
+      # Application secrets
+      - JWT_SECRET=cHJvZC1zZWNyZXQta2V5LWZvci1qb2ItdHJhY2tlci1hcHBsaWNhdGlvbi0yNTYtYml0cy1sb25nLXNlY3VyZQ==
+      # File storage directory inside container
+      - FILE_UPLOAD_DIR=/app/uploads/resumes
+    volumes:
+      # Persist uploaded resumes
+      - resume_data:/app/uploads/resumes
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - job-tracker-net
+    restart: unless-stopped
+
+  # ==========================================
+  # MySQL Database Service
+  # ==========================================
+  mysql:
+    image: mysql:8.0
+    container_name: job-tracker-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_DATABASE=job_tracker_db
+      - MYSQL_USER=job_tracker_user
+      - MYSQL_PASSWORD=secure_db_password_123
+      - MYSQL_ROOT_PASSWORD=root_password_123
+    volumes:
+      # Persist database data
+      - db_data:/var/lib/mysql
+    networks:
+      - job-tracker-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "job_tracker_user", "-psecure_db_password_123"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ==========================================
+  # Frontend React App (Existing)
+  # ==========================================
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: job-tracker-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - job-tracker-net
+    restart: unless-stopped
+
+volumes:
+  db_data:
+    name: job_tracker_db_data
+  resume_data:
+    name: job_tracker_resume_data
+
+networks:
+  job-tracker-net:
+    name: job-tracker-network
+    driver: bridge
